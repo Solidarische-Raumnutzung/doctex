@@ -1,0 +1,25 @@
+\documentclass[a4paper]{article}
+\usepackage[a4paper,left=2cm,right=2cm,top=2cm,bottom=2cm]{geometry}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern,textcomp}
+%\usepackage[ngerman]{babel}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{changepage} % http://ctan.org/pkg/changepage
+\usepackage{tabularx}   % Fancy tables
+\usepackage{array}      % Fancy tables
+
+% Define a ragged right column type for tables
+\newcolumntype{R}{>{\raggedright\arraybackslash}X}%
+
+% Blue Hyperlinks
+\definecolor{royalblue}{rgb}{0.25, 0.41, 0.88}
+\hypersetup{
+    colorlinks = true,
+    linkcolor = {royalblue},
+    urlcolor = {royalblue}
+}
+
+\begin{document}
+TEXT
+\end{document}
