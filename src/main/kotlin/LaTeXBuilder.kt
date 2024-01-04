@@ -7,14 +7,8 @@ import spoon.javadoc.api.elements.JavadocCommentView
 import spoon.javadoc.api.elements.JavadocReference
 import spoon.javadoc.api.elements.JavadocText
 import spoon.javadoc.api.parsing.JavadocParser
-import spoon.reflect.declaration.CtExecutable
-import spoon.reflect.declaration.CtModifiable
-import spoon.reflect.declaration.CtPackage
-import spoon.reflect.declaration.CtType
-import spoon.reflect.reference.CtArrayTypeReference
-import spoon.reflect.reference.CtExecutableReference
-import spoon.reflect.reference.CtReference
-import spoon.reflect.reference.CtTypeReference
+import spoon.reflect.declaration.*
+import spoon.reflect.reference.*
 import kotlin.jvm.optionals.getOrNull
 
 class LaTeXBuilder(private val rootPackage: CtPackage) {
@@ -30,7 +24,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
 
     fun <T : Any?> appendTypeSection(typeType: String, type: CtType<T>, content: LaTeXContent) {
         val header: LaTeXContent = {
-            appendText("$typeType ${type.simpleName}")
+            appendText("$typeType ${type.simpleName.escape()}")
             appendCommand("label", type.qualifiedName)
         }
 
@@ -67,8 +61,11 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         headerText: String
     ) where E : CtExecutable<T>, E : CtModifiable {
         val header: LaTeXContent = {
-            appendText(headerText)
-            appendCommand("label", executable.signature)
+            appendText(headerText.escape())
+            appendCommand(
+                "label",
+                "${(executable.parent as CtType<*>).qualifiedName}$MEMBER_SEPARATOR${executable.signature}"
+            )
         }
 
         val signature: LaTeXContent = teletyped {
@@ -76,7 +73,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
             appendTypeReference(executable.type)
             if (!executable.reference.isConstructor) {
                 appendText(" ")
-                appendText(executable.simpleName)
+                appendText(executable.simpleName.escape())
             }
             appendExecutableParameters(executable)
         }
@@ -138,9 +135,42 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
     }
 
+    fun <T : Any?> appendFieldSection(field: CtField<T>, fieldType: String) {
+        val of = (field.parent as CtType<*>)
+        val header: LaTeXContent = {
+            appendText("$fieldType ${field.simpleName.escape()}")
+            appendCommand(
+                "label",
+                "${of.qualifiedName}$MEMBER_SEPARATOR${field.simpleName}"
+            )
+        }
+
+        val signature = teletyped {
+            appendModifiers(field)
+            appendTypeReference(of.reference)
+            appendText(" ")
+            appendText(field.simpleName.escape())
+        }
+
+        val docElements = JavadocParser.forElement(field)
+        val javadoc = JavadocCommentView(docElements)
+
+        appendSection(header) {
+            appendTable {
+                addRow(emphasized("Signature"), signature)
+                separator()
+                if (javadoc.body.isNotEmpty()) {
+                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body))
+                    separator()
+                }
+            }
+        }
+    }
+
     fun appendReference(reference: CtReference) = when (reference) {
         is CtTypeReference<*> -> appendTypeReference(reference)
         is CtExecutableReference<*> -> appendExecutableReference(reference)
+        is CtFieldReference<*> -> appendFieldReference(reference)
         else -> teletyped(reference.simpleName)()
     }
 
@@ -148,7 +178,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         teletype {
 
             if (reference.isPrimitive || reference.typeDeclaration?.inPackage(rootPackage) != true) {
-                appendText(reference.simpleName)
+                appendText(reference.simpleName.escape())
                 return@teletype
             }
 
@@ -167,7 +197,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
 
             appendCommand("hyperref[${reference.qualifiedName}]") {
                 teletype {
-                    appendText(reference.simpleName)
+                    appendText(reference.simpleName.escape())
                 }
             }
 
@@ -195,16 +225,27 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         teletype {
             val declaring = reference.declaringType
             appendTypeReference(declaring)
-            val hyperref = "hyperref[${reference.executableDeclaration.signature}]"
+            val hyperref =
+                "hyperref[${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.executableDeclaration.signature}]"
             if (!reference.isConstructor) {
                 appendText(".")
-                appendCommand(hyperref, reference.simpleName)
+                appendCommand(hyperref, reference.simpleName.escape())
             }
             if (reference.parameters.isNotEmpty() || reference.executableDeclaration.parameters.isEmpty()) {
                 appendCommand(hyperref, "(")
                 appendTypeParameters(reference.parameters, "" to "")
                 appendCommand(hyperref, ")")
             }
+        }
+    }
+
+    private fun <T : Any?> appendFieldReference(reference: CtFieldReference<T>) {
+        teletype {
+            val declaring = reference.declaringType
+            appendTypeReference(declaring)
+            val hyperref = "hyperref[${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.simpleName}]"
+                .replace("_", "~")
+            appendCommand(hyperref, reference.simpleName.escape())
         }
     }
 
@@ -382,6 +423,8 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
     fun teletype(content: LaTeXContent) = appendCommandWithArgAppender("texttt", listOf(content))
 
     companion object {
-        const val INDENT = "  "
+        private const val INDENT = "  "
+        private const val MEMBER_SEPARATOR = "@"
+        private fun String.escape() = replace("_", "\\_")
     }
 }

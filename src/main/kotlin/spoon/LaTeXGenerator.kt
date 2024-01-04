@@ -31,7 +31,8 @@ class LaTeXGenerator(rootPackage: CtPackage) : CtAbstractVisitor() {
         builder.appendTypeSection(typeType, ctType) {
             // Sort constructors first then alphabetically
             ctType.declaredExecutables.sortedBy { it.simpleName }.sortedBy { !it.isConstructor }.map { it.executableDeclaration.accept(this@LaTeXGenerator) }
-            ctType.nestedTypes.map { it.accept(this@LaTeXGenerator) }
+            ctType.declaredFields.sortedBy { it.simpleName }.map { it.fieldDeclaration.accept(this@LaTeXGenerator) }
+            ctType.nestedTypes.sortedBy { it.simpleName }.map { it.accept(this@LaTeXGenerator) }
         }
     }
 
@@ -49,7 +50,19 @@ class LaTeXGenerator(rootPackage: CtPackage) : CtAbstractVisitor() {
         builder.appendExecutableSection(method, "Method ${method.simpleName}")
     }
 
+    override fun <T : Any?> visitCtField(field: CtField<T>?) {
+        if (field == null) {
+            return
+        }
+        builder.appendFieldSection(field, "Field")
+    }
 
+    override fun <T : Any?> visitCtEnumValue(enumValue: CtEnumValue<T>?) {
+        if (enumValue == null) {
+            return
+        }
+        builder.appendFieldSection(enumValue, "Enum value")
+    }
 
     fun generate() = builder.build()
 }
