@@ -9,8 +9,9 @@ import spoon.reflect.factory.Factory
 import spoon.support.compiler.jdt.JDTBasedSpoonCompiler
 import spoon.support.compiler.jdt.JDTTreeBuilder
 
-class DocTeXLauncher() : Launcher() {
+class DocTeXLauncher : Launcher() {
     override fun getCompilerInstance(factory: Factory?): SpoonModelBuilder {
+        factory?.environment?.complianceLevel = 19
         return NoMethodBodyCompiler(factory)
     }
 

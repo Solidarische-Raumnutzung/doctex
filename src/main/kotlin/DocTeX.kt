@@ -16,8 +16,10 @@ class DocTeX(private val sourcedir: File) {
         environment.apply {
             setShouldCompile(false)
             disableConsistencyChecks()
-            outputType = OutputType.NO_OUTPUT
             setCommentEnabled(true)
+            noClasspath = true
+            complianceLevel = 19
+            outputType = OutputType.NO_OUTPUT
         }
         addInputResource(FileSystemFolder(sourcedir))
     }
@@ -25,18 +27,20 @@ class DocTeX(private val sourcedir: File) {
 
     fun writeJavadoc(to: File, forPackage: String) {
         val templateText = DocTeX::class.java.getResource("/template.tex")!!.readText()
-        val rootPackage = model.allPackages.find { it.qualifiedName == forPackage } ?: throw Exception("Invalid root package provided. Available packages: ${model.allPackages}")
-        val packagesDocumentation = rootPackage.resolveAllPackages().map(CtPackage::generateDocs)
+        val rootPackage = model.allPackages.find { it.qualifiedName == forPackage }
+            ?: throw Exception("Invalid root package provided. Available packages: ${model.allPackages}")
+        val packagesDocumentation = rootPackage.resolveAllPackages().map { it.generateDocs(rootPackage) }
 
         val documentation = templateText.replace("TEXT", packagesDocumentation.joinToString("\n".repeat(3)))
         to.writeText(documentation)
     }
 
-    private fun CtPackage.resolveAllPackages(): List<CtPackage> = packages.flatMap { listOf(it) + it.resolveAllPackages() }
+    private fun CtPackage.resolveAllPackages(): List<CtPackage> =
+        packages.flatMap { listOf(it) + it.resolveAllPackages() }
 }
 
-private fun CtPackage.generateDocs(): String {
-    val generator = LaTeXGenerator()
+private fun CtPackage.generateDocs(rootPackage: CtPackage): String {
+    val generator = LaTeXGenerator(rootPackage)
     accept(generator)
-    return generator.toString()
+    return generator.generate()
 }

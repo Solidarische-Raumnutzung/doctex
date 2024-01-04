@@ -1,35 +1,131 @@
 package de.mr_pine.doctex
 
-class LaTeXBuilder {
+import de.mr_pine.doctex.spoon.inPackage
+import spoon.javadoc.api.elements.JavadocCommentView
+import spoon.javadoc.api.parsing.JavadocParser
+import spoon.reflect.declaration.CtPackage
+import spoon.reflect.declaration.CtType
+import spoon.reflect.reference.CtArrayTypeReference
+import spoon.reflect.reference.CtTypeReference
+
+private typealias LaTeXContent = LaTeXBuilder.() -> Unit
+
+class LaTeXBuilder(private val rootPackage: CtPackage) {
     private var indentedBuilders = Stack<StringBuilder>().apply { push(StringBuilder()) }
     private val stringBuilder
         get() = indentedBuilders.peek()
-    private var currentDepth = 0
+    private var sectionDepth = 0
 
-    fun appendPackageSection(packageName: String, content: LaTeXBuilder.() -> Unit) {
+    fun appendPackageSection(packageName: String, content: LaTeXContent) {
         appendSection("Package $packageName", content)
     }
 
-    fun appendClassSection(className: String, content: LaTeXBuilder.() -> Unit) {
-        appendSection("Class $className", content)
+    fun <T : Any?> appendTypeSection(typeType: String, type: CtType<T>, content: LaTeXContent) {
+        val header: LaTeXContent = {
+            appendText("$typeType ${type.simpleName}")
+            appendCommand("label", type.qualifiedName)
+        }
+
+        val signature = teletyped {
+            appendText(type.visibility.toString())
+            appendText(" ")
+            appendText(typeType.lowercase())
+            appendText(" ")
+            appendTypeSignature(type)
+        }
+
+        val docElements = JavadocParser.forElement(type)
+        val javadoc = JavadocCommentView(docElements)
+
+        appendSection(header) {
+            appendTable {
+                addRow(emphasized("Signature"), signature)
+                if (docElements.isNotEmpty()) {
+                    separator()
+                    addRow(emphasized("Behaviour"), { appendText(javadoc.toString()) })
+                }
+            }
+            this.content()
+        }
     }
 
-    private fun appendSection(name: String, content: LaTeXBuilder.() -> Unit) = appendSection({appendText(name)}, content)
-    private fun appendSection(name: LaTeXBuilder.() -> Unit, content: LaTeXBuilder.() -> Unit) {
-        val sectionCommand = when (currentDepth) {
-            in (0..2) -> "${"sub".repeat(currentDepth)}section"
+    private fun <T : Any?> appendTypeSignature(type: CtType<T>) {
+        appendTypeReference(type.reference)
+        if (type.isParameterized) {
+            appendTypeParameters(type.formalCtTypeParameters) {
+                appendTypeSignature(it)
+            }
+        }
+        if (type.superclass != null && !type.isEnum && type.superclass.qualifiedName != Record::class.qualifiedName) {
+            appendText(" extends ")
+            appendTypeReference(type.superclass)
+        }
+        if (type.superInterfaces.isNotEmpty()) {
+            appendText(" implements ")
+            val references = type.superInterfaces.map {
+                val reference: LaTeXContent = { appendTypeReference(it) }
+                reference
+            }.intersperse { appendText(", ") }
+            references.forEach { this.it() }
+        }
+    }
+
+    private fun <T : Any?> appendTypeReference(reference: CtTypeReference<T>) {
+        teletype {
+            if (reference.typeDeclaration?.inPackage(rootPackage) != true) {
+                appendText(reference.simpleName)
+                return@teletype
+            }
+
+            if (reference.isArray) {
+                val component = (reference as CtArrayTypeReference).componentType
+                appendTypeReference(component)
+                appendText("[]")
+                return@teletype
+            }
+
+            if (reference.isParameterized) {
+                appendTypeReference(reference.typeErasure)
+                appendTypeParameters(reference.actualTypeArguments) { appendTypeReference(it) }
+                return@teletype
+            }
+
+            appendCommand("hyperref[${reference.qualifiedName}]") {
+                teletype {
+                    appendText(reference.simpleName)
+                }
+            }
+        }
+    }
+
+    private fun <T> appendTypeParameters(
+        parameterReferences: Collection<T>,
+        appender: LaTeXBuilder.(T) -> Unit
+    ) {
+        appendText("<")
+        val parameters = parameterReferences.map { val content: LaTeXContent = { this.appender(it) }; content }.intersperse { appendText(", ") }
+        parameters.forEach { this.it() }
+        appendText(">")
+    }
+
+    private fun appendSection(name: String, content: LaTeXContent) =
+        appendSection({ appendText(name) }, content)
+
+    private fun appendSection(name: LaTeXContent, content: LaTeXContent) {
+        val sectionCommand = when (sectionDepth) {
+            in (0..2) -> "${"sub".repeat(sectionDepth)}section"
             3 -> "paragraph"
             else -> "subparagraph"
         }
-        currentDepth++
+        sectionDepth++
         appendCommandWithArgAppender(sectionCommand, listOf(name))
         appendLine()
-        inEnvironment(listOf("adjustwidth", "1.5em", "0pt"), content)
-        currentDepth--
+        inEnvironment("adjustwidth", listOf("1.5em", "0pt"), content)
+        sectionDepth--
     }
 
-    private fun inEnvironment(arguments: List<String>, content: LaTeXBuilder.() -> Unit) {
-        appendCommand("begin", arguments)
+    private fun inEnvironment(name: String, arguments: List<String>, content: LaTeXContent) {
+        appendCommand("begin", listOf(name) + arguments)
         appendLine()
 
         indentedBuilders.push(StringBuilder())
@@ -39,15 +135,19 @@ class LaTeXBuilder {
         stringBuilder.append(builder.toString().prependIndent(INDENT))
 
         appendLine()
-        appendCommand("end", arguments)
+        appendCommand("end", name)
     }
 
+    private fun appendCommand(name: String, argument: String) = appendCommand(name, listOf(argument))
     private fun appendCommand(name: String, arguments: List<String>) {
-        val mappedArgs: List<LaTeXBuilder.() -> Unit> = arguments.map { { appendText(it) } }
+        val mappedArgs: List<LaTeXContent> = arguments.map { { appendText(it) } }
         appendCommandWithArgAppender(name, mappedArgs)
     }
 
-    private fun appendCommandWithArgAppender(name: String, arguments: List<LaTeXBuilder.() -> Unit>) {
+    private fun appendCommand(name: String, argument: LaTeXContent) =
+        appendCommandWithArgAppender(name, listOf(argument))
+
+    private fun appendCommandWithArgAppender(name: String, arguments: List<LaTeXContent>) {
         appendText("\\$name")
         arguments.forEach {
             appendText("{")
@@ -63,7 +163,7 @@ class LaTeXBuilder {
 
     private fun appendLine() = appendText("\n")
 
-    override fun toString(): String {
+    fun build(): String {
         var previousBuilder = indentedBuilders.pop()
         while (indentedBuilders.isNotEmpty()) {
             stringBuilder.appendLine()
@@ -72,6 +172,41 @@ class LaTeXBuilder {
         }
         return previousBuilder.toString()
     }
+
+    private fun appendTable(content: LaTeXTable.() -> Unit) {
+        val table = LaTeXTable()
+        table.content()
+        table.separator()
+        inEnvironment("tabularx", listOf("0.9\\textwidth", "@{}l R@{}")) {
+            table.rows.forEach { (useSeparator, columns) ->
+                columns.intersperse { appendText(" & ") }.forEach { this.it() }
+                if (useSeparator) {
+                    appendText(" \\\\")
+                }
+                appendLine()
+            }
+        }
+    }
+
+    private class LaTeXTable {
+        val rows: MutableList<Pair<Boolean, List<LaTeXContent>>> = mutableListOf()
+
+        fun addRow(vararg columns: LaTeXContent) {
+            rows.add(true to columns.toList())
+        }
+
+        fun separator() = rows.add(false to listOf { appendCommand("hline", listOf()) })
+    }
+
+    private fun emphasized(content: LaTeXContent): LaTeXContent =
+        { appendCommandWithArgAppender("emph", listOf(content)) }
+
+    private fun emphasized(content: String): LaTeXContent = { appendCommand("emph", content) }
+
+    private fun teletyped(content: LaTeXContent): LaTeXContent = { teletype(content) }
+
+    private fun teletyped(content: String): LaTeXContent = teletyped { appendText(content) }
+    private fun teletype(content: LaTeXContent) = appendCommandWithArgAppender("texttt", listOf(content))
 
     companion object {
         const val INDENT = "  "
