@@ -12,6 +12,7 @@ import spoon.reflect.declaration.CtModifiable
 import spoon.reflect.declaration.CtPackage
 import spoon.reflect.declaration.CtType
 import spoon.reflect.reference.CtArrayTypeReference
+import spoon.reflect.reference.CtExecutableReference
 import spoon.reflect.reference.CtReference
 import spoon.reflect.reference.CtTypeReference
 import kotlin.jvm.optionals.getOrNull
@@ -38,7 +39,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
             appendText(" ")
             appendText(typeType.lowercase())
             appendText(" ")
-            appendTypeSignature(type)
+            appendTypeReference(type.reference, true)
         }
 
         val docElements = JavadocParser.forElement(type)
@@ -65,6 +66,11 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         executable: E,
         headerText: String
     ) where E : CtExecutable<T>, E : CtModifiable {
+        val header: LaTeXContent = {
+            appendText(headerText)
+            appendCommand("label", executable.signature)
+        }
+
         val signature: LaTeXContent = teletyped {
             appendModifiers(executable)
             appendTypeReference(executable.type)
@@ -77,7 +83,6 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
 
         val docElements = JavadocParser.forElement(executable)
         val javadoc = JavadocCommentView(docElements)
-
 
 
         val javadocReturns = javadoc.getBlockTag(StandardJavadocTagType.RETURN)
@@ -109,7 +114,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
             }
         }
 
-        appendSection(headerText) {
+        appendSection(header) {
             appendTable {
                 addRow(emphasized("Signature"), signature)
                 separator()
@@ -133,33 +138,13 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
     }
 
-    private fun <T : Any?> appendTypeSignature(type: CtType<T>) {
-        appendTypeReference(type.reference)
-        if (type.isParameterized) {
-            appendTypeParameters(type.formalCtTypeParameters) {
-                appendTypeSignature(it)
-            }
-        }
-        if (type.superclass != null && !type.isEnum && type.superclass.qualifiedName != Record::class.qualifiedName) {
-            appendText(" extends ")
-            appendTypeReference(type.superclass)
-        }
-        if (type.superInterfaces.isNotEmpty()) {
-            appendText(" implements ")
-            val references = type.superInterfaces.map {
-                val reference: LaTeXContent = { appendTypeReference(it) }
-                reference
-            }.intersperse { appendText(", ") }
-            references.forEach { this.it() }
-        }
-    }
-
-    private fun appendReference(reference: CtReference) = when (reference) {
+    fun appendReference(reference: CtReference) = when (reference) {
         is CtTypeReference<*> -> appendTypeReference(reference)
+        is CtExecutableReference<*> -> appendExecutableReference(reference)
         else -> teletyped(reference.simpleName)()
     }
 
-    fun <T : Any?> appendTypeReference(reference: CtTypeReference<T>) {
+    private fun <T : Any?> appendTypeReference(reference: CtTypeReference<T>, showSuper: Boolean = false) {
         teletype {
 
             if (reference.isPrimitive || reference.typeDeclaration?.inPackage(rootPackage) != true) {
@@ -176,7 +161,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
 
             if (reference.isParameterized) {
                 appendTypeReference(reference.typeErasure)
-                appendTypeParameters(reference.actualTypeArguments) { appendTypeReference(it) }
+                appendTypeParameters(reference.actualTypeArguments)
                 return@teletype
             }
 
@@ -185,18 +170,53 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
                     appendText(reference.simpleName)
                 }
             }
+
+            if (reference.isParameterized) {
+                appendTypeParameters(reference.actualTypeArguments)
+            }
+
+            if (showSuper && reference.superclass != null && !reference.isEnum && reference.superclass.qualifiedName != Record::class.qualifiedName) {
+                appendText(" extends ")
+                appendTypeReference(reference.superclass)
+            }
+
+            if (showSuper && reference.superInterfaces.isNotEmpty()) {
+                appendText(" implements ")
+                val references = reference.superInterfaces.map {
+                    val referenceText: LaTeXContent = { appendTypeReference(it) }
+                    referenceText
+                }.intersperse { appendText(", ") }
+                references.forEach { this.it() }
+            }
         }
     }
 
-    private fun <T> appendTypeParameters(
-        parameterReferences: Collection<T>,
-        appender: LaTeXBuilder.(T) -> Unit
+    private fun <T : Any?> appendExecutableReference(reference: CtExecutableReference<T>) {
+        teletype {
+            val declaring = reference.declaringType
+            appendTypeReference(declaring)
+            val hyperref = "hyperref[${reference.executableDeclaration.signature}]"
+            if (!reference.isConstructor) {
+                appendText(".")
+                appendCommand(hyperref, reference.simpleName)
+            }
+            if (reference.parameters.isNotEmpty() || reference.executableDeclaration.parameters.isEmpty()) {
+                appendCommand(hyperref, "(")
+                appendTypeParameters(reference.parameters, "" to "")
+                appendCommand(hyperref, ")")
+            }
+        }
+    }
+
+    private fun appendTypeParameters(
+        parameterReferences: Collection<CtTypeReference<*>>,
+        delimiters: Pair<String, String> = "<" to ">"
     ) {
-        appendText("<")
-        val parameters = parameterReferences.map { val content: LaTeXContent = { this.appender(it) }; content }
+        appendText(delimiters.first)
+        val parameters = parameterReferences.map { val content: LaTeXContent = { appendTypeReference(it) }; content }
             .intersperse { appendText(", ") }
         parameters.forEach { this.it() }
-        appendText(">")
+        appendText(delimiters.second)
     }
 
     private fun <T> appendExecutableParameters(executable: CtExecutable<T>) {
@@ -226,7 +246,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
 
     private fun parameterJavadoc(javadoc: JavadocCommentView): LaTeXContent? {
         val javadocParameters = javadoc.getBlockTag(StandardJavadocTagType.PARAM)
-        if(javadocParameters.isEmpty()) {
+        if (javadocParameters.isEmpty()) {
             return null
         }
         val parameters: LaTeXContent = {

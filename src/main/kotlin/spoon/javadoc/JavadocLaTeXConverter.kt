@@ -6,6 +6,7 @@ import de.mr_pine.doctex.intersperse
 import spoon.javadoc.api.StandardJavadocTagType
 import spoon.javadoc.api.elements.*
 import spoon.reflect.code.CtJavaDocTag.TagType
+import spoon.reflect.reference.CtExecutableReference
 import spoon.reflect.reference.CtTypeReference
 
 class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
@@ -80,10 +81,7 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
 
     override fun visitReference(docReference: JavadocReference?): LaTeXContent = {
         if (docReference != null) {
-            when (val reference = docReference.reference) {
-                is CtTypeReference<*> -> appendTypeReference(reference)
-                else -> reference.simpleName
-            }
+            appendReference(docReference.reference)
         }
     }
 }
