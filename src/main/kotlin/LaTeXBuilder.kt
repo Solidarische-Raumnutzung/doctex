@@ -1,6 +1,7 @@
 package de.mr_pine.doctex
 
 import de.mr_pine.doctex.spoon.inPackage
+import de.mr_pine.doctex.spoon.javadoc.JavadocLaTeXConverter
 import spoon.javadoc.api.elements.JavadocCommentView
 import spoon.javadoc.api.parsing.JavadocParser
 import spoon.reflect.declaration.CtPackage
@@ -8,13 +9,12 @@ import spoon.reflect.declaration.CtType
 import spoon.reflect.reference.CtArrayTypeReference
 import spoon.reflect.reference.CtTypeReference
 
-private typealias LaTeXContent = LaTeXBuilder.() -> Unit
-
 class LaTeXBuilder(private val rootPackage: CtPackage) {
     private var indentedBuilders = Stack<StringBuilder>().apply { push(StringBuilder()) }
     private val stringBuilder
         get() = indentedBuilders.peek()
     private var sectionDepth = 0
+    private val javadocConverter = JavadocLaTeXConverter()
 
     fun appendPackageSection(packageName: String, content: LaTeXContent) {
         appendSection("Package $packageName", content)
@@ -42,7 +42,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
                 addRow(emphasized("Signature"), signature)
                 if (docElements.isNotEmpty()) {
                     separator()
-                    addRow(emphasized("Behaviour"), { appendText(javadoc.toString()) })
+                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body))
                 }
             }
             this.content()
@@ -70,7 +70,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
     }
 
-    private fun <T : Any?> appendTypeReference(reference: CtTypeReference<T>) {
+    fun <T : Any?> appendTypeReference(reference: CtTypeReference<T>) {
         teletype {
             if (reference.typeDeclaration?.inPackage(rootPackage) != true) {
                 appendText(reference.simpleName)
@@ -124,7 +124,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         sectionDepth--
     }
 
-    private fun inEnvironment(name: String, arguments: List<String>, content: LaTeXContent) {
+    fun inEnvironment(name: String, arguments: List<String>, content: LaTeXContent) {
         appendCommand("begin", listOf(name) + arguments)
         appendLine()
 
@@ -138,8 +138,8 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         appendCommand("end", name)
     }
 
-    private fun appendCommand(name: String, argument: String) = appendCommand(name, listOf(argument))
-    private fun appendCommand(name: String, arguments: List<String>) {
+    fun appendCommand(name: String, argument: String) = appendCommand(name, listOf(argument))
+    fun appendCommand(name: String, arguments: List<String>) {
         val mappedArgs: List<LaTeXContent> = arguments.map { { appendText(it) } }
         appendCommandWithArgAppender(name, mappedArgs)
     }
@@ -156,12 +156,12 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
     }
 
-    private fun appendText(text: String): LaTeXBuilder {
+    fun appendText(text: String): LaTeXBuilder {
         stringBuilder.append(text)
         return this
     }
 
-    private fun appendLine() = appendText("\n")
+    fun appendLine() = appendText("\n")
 
     fun build(): String {
         var previousBuilder = indentedBuilders.pop()

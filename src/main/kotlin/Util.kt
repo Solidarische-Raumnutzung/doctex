@@ -16,3 +16,5 @@ fun <T> List<T>.intersperse(element: T) = buildList {
     }
     add(this@intersperse.last())
 }
+
+typealias LaTeXContent = LaTeXBuilder.() -> Unit
