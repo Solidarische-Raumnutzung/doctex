@@ -1,10 +1,11 @@
 package de.mr_pine.doctex.spoon
 
 import de.mr_pine.doctex.LaTeXBuilder
+import de.mr_pine.doctex.Visibility
 import spoon.reflect.declaration.*
 import spoon.reflect.visitor.CtAbstractVisitor
 
-class LaTeXGenerator(rootPackage: CtPackage) : CtAbstractVisitor() {
+class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visibility) : CtAbstractVisitor() {
     private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage)
     override fun visitCtPackage(ctPackage: CtPackage?) {
         if (ctPackage == null || ctPackage.isEmpty) {
@@ -12,7 +13,8 @@ class LaTeXGenerator(rootPackage: CtPackage) : CtAbstractVisitor() {
         }
 
         builder.appendPackageSection(ctPackage.qualifiedName) {
-            ctPackage.types.map { it.accept(this@LaTeXGenerator) }
+            ctPackage.types.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }
+                .map { it.accept(this@LaTeXGenerator) }
         }
     }
 
@@ -30,9 +32,11 @@ class LaTeXGenerator(rootPackage: CtPackage) : CtAbstractVisitor() {
         }
         builder.appendTypeSection(typeType, ctType) {
             // Sort constructors first then alphabetically
-            ctType.declaredExecutables.sortedBy { it.simpleName }.sortedBy { !it.isConstructor }.map { it.executableDeclaration.accept(this@LaTeXGenerator) }
-            ctType.declaredFields.sortedBy { it.simpleName }.map { it.fieldDeclaration.accept(this@LaTeXGenerator) }
-            ctType.nestedTypes.sortedBy { it.simpleName }.map { it.accept(this@LaTeXGenerator) }
+            ctType.declaredExecutables.reversed().sortedBy { !it.isConstructor }.map { it.executableDeclaration }
+                .filter { it is CtModifiable && Visibility.fromModifiers(it.modifiers) >= minimumVisibility }
+                .map { it.accept(this@LaTeXGenerator) }
+            ctType.declaredFields.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }.reversed().map { it.fieldDeclaration.accept(this@LaTeXGenerator) }
+            ctType.nestedTypes.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }.reversed().map { it.accept(this@LaTeXGenerator) }
         }
     }
 
