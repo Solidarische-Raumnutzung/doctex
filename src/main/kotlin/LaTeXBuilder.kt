@@ -2,6 +2,7 @@ package de.mr_pine.doctex
 
 import de.mr_pine.doctex.spoon.inPackage
 import de.mr_pine.doctex.spoon.javadoc.JavadocLaTeXConverter
+import de.mr_pine.doctex.spoon.javadoc.JavadocReferenceParentVisitor
 import spoon.javadoc.api.StandardJavadocTagType
 import spoon.javadoc.api.elements.JavadocCommentView
 import spoon.javadoc.api.elements.JavadocReference
@@ -37,7 +38,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
 
         val docElements = JavadocParser.forElement(type)
-        val javadoc = JavadocCommentView(docElements)
+        val javadoc = JavadocCommentView(docElements).adjustReferenceParents(type)
 
         appendSection(header) {
             appendTable(1.0) {
@@ -79,7 +80,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
 
         val docElements = JavadocParser.forElement(executable)
-        val javadoc = JavadocCommentView(docElements)
+        val javadoc = JavadocCommentView(docElements).adjustReferenceParents(executable)
 
 
         val javadocReturns = javadoc.getBlockTag(StandardJavadocTagType.RETURN)
@@ -153,7 +154,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
 
         val docElements = JavadocParser.forElement(field)
-        val javadoc = JavadocCommentView(docElements)
+        val javadoc = JavadocCommentView(docElements).adjustReferenceParents(field)
 
         appendSection(header) {
             appendTable {
@@ -224,11 +225,16 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
     private fun <T : Any?> appendExecutableReference(reference: CtExecutableReference<T>) {
         teletype {
             val declaring = reference.declaringType
-            appendTypeReference(declaring)
             val hyperref =
                 "hyperref[${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.executableDeclaration.signature}]"
-            if (!reference.isConstructor) {
+            val isOwnClass = reference.getParent(CtType::class.java).qualifiedName == declaring.qualifiedName
+            if (reference.isConstructor || !isOwnClass) {
+                appendTypeReference(declaring)
+            }
+            if (!reference.isConstructor && !isOwnClass) {
                 appendText(".")
+            }
+            if (!reference.isConstructor) {
                 appendCommand(hyperref, reference.simpleName.escape())
             }
             if (reference.parameters.isNotEmpty() || reference.executableDeclaration.parameters.isEmpty()) {
@@ -426,5 +432,10 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         private const val INDENT = "  "
         private const val MEMBER_SEPARATOR = "@"
         private fun String.escape() = replace("_", "\\_")
+        private fun JavadocCommentView.adjustReferenceParents(to: CtElement): JavadocCommentView {
+            val visitor = JavadocReferenceParentVisitor(to)
+            this.elements.forEach { it.accept(visitor) }
+            return this
+        }
     }
 }
