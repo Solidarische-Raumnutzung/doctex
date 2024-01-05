@@ -7,17 +7,19 @@ import spoon.javadoc.api.StandardJavadocTagType
 import spoon.javadoc.api.elements.JavadocCommentView
 import spoon.javadoc.api.elements.JavadocReference
 import spoon.javadoc.api.elements.JavadocText
+import spoon.javadoc.api.parsing.InheritanceResolver
 import spoon.javadoc.api.parsing.JavadocParser
 import spoon.reflect.declaration.*
 import spoon.reflect.reference.*
 import kotlin.jvm.optionals.getOrNull
 
-class LaTeXBuilder(private val rootPackage: CtPackage) {
+class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: Boolean) {
     private var indentedBuilders = Stack<StringBuilder>().apply { push(StringBuilder()) }
     private val stringBuilder
         get() = indentedBuilders.peek()
     private var sectionDepth = 0
     private val javadocConverter = JavadocLaTeXConverter()
+    private val inheritanceResolver = InheritanceResolver()
 
     fun appendPackageSection(packageName: String, content: LaTeXContent) {
         appendSection("Package $packageName", content)
@@ -37,14 +39,13 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
             appendTypeReference(type.reference, true)
         }
 
-        val docElements = JavadocParser.forElement(type)
-        val javadoc = JavadocCommentView(docElements).adjustReferenceParents(type)
+        val javadoc = type.javadoc
 
         appendSection(header) {
             appendTable(1.0) {
                 addRow(emphasized("Signature"), signature)
                 separator()
-                if (docElements.isNotEmpty()) {
+                if (javadoc.body.isNotEmpty()) {
                     addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body))
                     separator()
                 }
@@ -79,9 +80,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
             appendExecutableParameters(executable)
         }
 
-        val docElements = JavadocParser.forElement(executable)
-        val javadoc = JavadocCommentView(docElements).adjustReferenceParents(executable)
-
+        val javadoc = executable.javadoc
 
         val javadocReturns = javadoc.getBlockTag(StandardJavadocTagType.RETURN)
         val returns: LaTeXContent = {
@@ -96,19 +95,25 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
             appendTable(1.0) {
                 for (thrown in javadocThrows) {
                     val throwable = thrown.getArgument(JavadocReference::class.java)
-                    val typeref: LaTeXContent = {
+                    val typeRef: LaTeXContent = {
                         teletype {
                             if (throwable.isPresent) {
                                 appendReference(throwable.get().reference)
                             } else {
-                                appendText("unknown")
+                                appendText(thrown.getArgument(JavadocText::class.java).getOrNull()?.text ?: "unknown")
                             }
                         }
                         appendText(":")
                     }
                     val description = javadocConverter.visitBlockTag(thrown, 1)
-                    addRow(typeref, description)
+                    addRow(typeRef, description)
                 }
+            }
+        }
+
+        val overrides: LaTeXContent? = executable.getParentExecutable()?.let { parent ->
+            {
+                appendExecutableReference(parent.reference, true)
             }
         }
 
@@ -132,6 +137,10 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
                     addRow(emphasized("Throws"), throws)
                     separator()
                 }
+                overrides?.let {
+                    addRow(emphasized("Overrides"), it)
+                    separator()
+                }
             }
         }
     }
@@ -153,8 +162,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
             appendText(field.simpleName.escape())
         }
 
-        val docElements = JavadocParser.forElement(field)
-        val javadoc = JavadocCommentView(docElements).adjustReferenceParents(field)
+        val javadoc = field.javadoc
 
         appendSection(header) {
             appendTable {
@@ -222,12 +230,12 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         }
     }
 
-    private fun <T : Any?> appendExecutableReference(reference: CtExecutableReference<T>) {
+    private fun <T : Any?> appendExecutableReference(reference: CtExecutableReference<T>, qualify: Boolean = false) {
         teletype {
             val declaring = reference.declaringType
             val hyperref =
                 "hyperref[${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.executableDeclaration.signature}]"
-            val isOwnClass = reference.getParent(CtType::class.java).qualifiedName == declaring.qualifiedName
+            val isOwnClass = !qualify && reference.getParent(CtType::class.java).qualifiedName == declaring.qualifiedName
             if (reference.isConstructor || !isOwnClass) {
                 appendTypeReference(declaring)
             }
@@ -281,6 +289,13 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         appendText("(")
         parameterAppenders.intersperse { appendText(", ") }.forEach { this.it() }
         appendText(")")
+    }
+
+    private fun <T> CtExecutable<T>.getParentExecutable(): CtExecutable<out Any>? {
+        if (this !is CtMethod) {
+            return null
+        }
+        return inheritanceResolver.findSuperMethodsInCommentInheritanceOrder(this.reference.declaringType.typeDeclaration, this).firstOrNull()
     }
 
     private fun appendModifiers(test: CtModifiable) {
@@ -432,10 +447,20 @@ class LaTeXBuilder(private val rootPackage: CtPackage) {
         private const val INDENT = "  "
         private const val MEMBER_SEPARATOR = "@"
         private fun String.escape() = replace("_", "\\_")
-        private fun JavadocCommentView.adjustReferenceParents(to: CtElement): JavadocCommentView {
-            val visitor = JavadocReferenceParentVisitor(to)
-            this.elements.forEach { it.accept(visitor) }
-            return this
-        }
+
     }
+
+    private val CtElement.javadoc: JavadocCommentView
+        get() {
+            val elements = JavadocParser.forElement(this)
+            var javadoc = JavadocCommentView(elements)
+            javadoc = if (inheritDoc) {
+                JavadocCommentView(inheritanceResolver.completeJavadocWithInheritedTags(this, javadoc))
+            } else {
+                javadoc
+            }
+            val visitor = JavadocReferenceParentVisitor(this)
+            javadoc.elements.forEach { it.accept(visitor) }
+            return javadoc
+        }
 }

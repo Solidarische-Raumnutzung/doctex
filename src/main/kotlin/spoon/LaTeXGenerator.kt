@@ -6,8 +6,8 @@ import de.mr_pine.doctex.annotations.DoctexIgnore
 import spoon.reflect.declaration.*
 import spoon.reflect.visitor.CtAbstractVisitor
 
-class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visibility) : CtAbstractVisitor() {
-    private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage)
+class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visibility, inheritDoc: Boolean) : CtAbstractVisitor() {
+    private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage, inheritDoc)
     override fun visitCtPackage(ctPackage: CtPackage?) {
         if (ctPackage == null || !ctPackage.hasTypes()) {
             return
@@ -33,10 +33,10 @@ class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visi
         }
         builder.appendTypeSection(typeType, ctType) {
             // Sort constructors first then alphabetically
-            ctType.declaredExecutables.reversed().sortedBy { !it.isConstructor }.map { it.executableDeclaration }
+            ctType.declaredExecutables.reversed().asSequence().sortedBy { !it.isConstructor }.map { it.executableDeclaration }
                 .filter { it is CtModifiable && Visibility.fromModifiers(it.modifiers) >= minimumVisibility }
                 .filter { DoctexIgnore::class.qualifiedName !in it.annotations.map { it.annotationType.qualifiedName } }
-                .map { it.accept(this@LaTeXGenerator) }
+                .map { it.accept(this@LaTeXGenerator) }.toList()
             ctType.declaredFields.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }.reversed()
                 .filter { DoctexIgnore::class.qualifiedName !in it.annotations.map { it.annotationType.qualifiedName } }
                 .map { it.fieldDeclaration.accept(this@LaTeXGenerator) }
