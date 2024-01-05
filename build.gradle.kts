@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "de.mr_pine"
-version = "1.0-SNAPSHOT"
+version = "1.0"
 
 repositories {
     mavenCentral()
@@ -14,6 +14,7 @@ dependencies {
 
     implementation("fr.inria.gforge.spoon:spoon-javadoc:10.4.3-beta-13")
     implementation("fr.inria.gforge.spoon:spoon-core:10.4.3-beta-13")
+    implementation(project(":annotations"))
 
     implementation("com.github.ajalt.clikt:clikt:4.2.1")
 }

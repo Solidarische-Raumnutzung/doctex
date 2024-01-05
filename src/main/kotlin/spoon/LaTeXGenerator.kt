@@ -2,13 +2,14 @@ package de.mr_pine.doctex.spoon
 
 import de.mr_pine.doctex.LaTeXBuilder
 import de.mr_pine.doctex.Visibility
+import de.mr_pine.doctex.annotations.DoctexIgnore
 import spoon.reflect.declaration.*
 import spoon.reflect.visitor.CtAbstractVisitor
 
 class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visibility) : CtAbstractVisitor() {
     private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage)
     override fun visitCtPackage(ctPackage: CtPackage?) {
-        if (ctPackage == null || ctPackage.isEmpty) {
+        if (ctPackage == null || !ctPackage.hasTypes()) {
             return
         }
 
@@ -34,9 +35,14 @@ class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visi
             // Sort constructors first then alphabetically
             ctType.declaredExecutables.reversed().sortedBy { !it.isConstructor }.map { it.executableDeclaration }
                 .filter { it is CtModifiable && Visibility.fromModifiers(it.modifiers) >= minimumVisibility }
+                .filter { DoctexIgnore::class.qualifiedName !in it.annotations.map { it.annotationType.qualifiedName } }
                 .map { it.accept(this@LaTeXGenerator) }
-            ctType.declaredFields.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }.reversed().map { it.fieldDeclaration.accept(this@LaTeXGenerator) }
-            ctType.nestedTypes.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }.reversed().map { it.accept(this@LaTeXGenerator) }
+            ctType.declaredFields.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }.reversed()
+                .filter { DoctexIgnore::class.qualifiedName !in it.annotations.map { it.annotationType.qualifiedName } }
+                .map { it.fieldDeclaration.accept(this@LaTeXGenerator) }
+            ctType.nestedTypes.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }.reversed()
+                .filter { DoctexIgnore::class.qualifiedName !in it.annotations.map { it.annotationType.qualifiedName } }
+                .map { it.accept(this@LaTeXGenerator) }
         }
     }
 
