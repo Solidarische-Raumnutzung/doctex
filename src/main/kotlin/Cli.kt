@@ -27,6 +27,7 @@ class Cli : CliktCommand(name = "doctex") {
     private val classpath by option(help = "The classpath of your application, should be a folder containing .class files or a jar. Improves resolution of external classes.").file(
         mustExist = true
     )
+    private val gitlabSourceRoot by option()
 
     init {
         context {
@@ -36,7 +37,7 @@ class Cli : CliktCommand(name = "doctex") {
 
     override fun run() {
         val doctex = DocTeX(sourceDir, classpath)
-        doctex.writeJavadoc(output, rootPackage, minimumVisibility, inheritDoc)
+        doctex.writeJavadoc(output, rootPackage, minimumVisibility, inheritDoc, gitlabSourceRoot)
     }
 }
 

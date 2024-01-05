@@ -5,15 +5,25 @@ import de.mr_pine.doctex.Visibility
 import de.mr_pine.doctex.annotations.DoctexIgnore
 import spoon.reflect.declaration.*
 import spoon.reflect.visitor.CtAbstractVisitor
+import java.io.File
 
-class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visibility, inheritDoc: Boolean) : CtAbstractVisitor() {
-    private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage, inheritDoc)
+class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visibility, inheritDoc: Boolean, sourceRoot: File, gitlabSourceRoot: String?) : CtAbstractVisitor() {
+    private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage, inheritDoc, sourceRoot, gitlabSourceRoot)
+
+    init {
+        if (gitlabSourceRoot != null) {
+            builder.appendGitlabLogoFile()
+        }
+
+        builder.appendLine()
+        builder.appendLine()
+    }
     override fun visitCtPackage(ctPackage: CtPackage?) {
         if (ctPackage == null || !ctPackage.hasTypes()) {
             return
         }
 
-        builder.appendPackageSection(ctPackage.qualifiedName) {
+        builder.appendPackageSection(ctPackage) {
             ctPackage.types.filter { Visibility.fromModifiers(it.modifiers) >= minimumVisibility }
                 .map { it.accept(this@LaTeXGenerator) }
         }

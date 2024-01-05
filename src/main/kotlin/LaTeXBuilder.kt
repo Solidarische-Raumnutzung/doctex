@@ -9,11 +9,18 @@ import spoon.javadoc.api.elements.JavadocReference
 import spoon.javadoc.api.elements.JavadocText
 import spoon.javadoc.api.parsing.InheritanceResolver
 import spoon.javadoc.api.parsing.JavadocParser
+import spoon.reflect.cu.position.NoSourcePosition
 import spoon.reflect.declaration.*
 import spoon.reflect.reference.*
+import java.io.File
 import kotlin.jvm.optionals.getOrNull
 
-class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: Boolean) {
+class LaTeXBuilder(
+    private val rootPackage: CtPackage,
+    private val inheritDoc: Boolean,
+    private val sourceRoot: File,
+    private val gitlabSourceRoot: String?
+) {
     private var indentedBuilders = Stack<StringBuilder>().apply { push(StringBuilder()) }
     private val stringBuilder
         get() = indentedBuilders.peek()
@@ -21,14 +28,16 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
     private val javadocConverter = JavadocLaTeXConverter()
     private val inheritanceResolver = InheritanceResolver()
 
-    fun appendPackageSection(packageName: String, content: LaTeXContent) {
-        appendSection("Package $packageName", content)
+    fun appendPackageSection(pkg: CtPackage, content: LaTeXContent) {
+        appendSection("Package ${pkg.qualifiedName}", content)
     }
 
     fun <T : Any?> appendTypeSection(typeType: String, type: CtType<T>, content: LaTeXContent) {
         val header: LaTeXContent = {
             appendText("$typeType ${type.simpleName.escape()}")
             appendCommand("label", type.qualifiedName)
+            appendText(" ")
+            appendGitlabLink(type)
         }
 
         val signature = teletyped {
@@ -68,6 +77,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
                 "label",
                 "${(executable.parent as CtType<*>).qualifiedName}$MEMBER_SEPARATOR${executable.signature}"
             )
+            appendGitlabLink(executable)
         }
 
         val signature: LaTeXContent = teletyped {
@@ -153,6 +163,7 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
                 "label",
                 "${of.qualifiedName}$MEMBER_SEPARATOR${field.simpleName}"
             )
+            appendGitlabLink(field)
         }
 
         val signature = teletyped {
@@ -235,7 +246,8 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
             val declaring = reference.declaringType
             val hyperref =
                 "hyperref[${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.executableDeclaration.signature}]"
-            val isOwnClass = !qualify && reference.getParent(CtType::class.java).qualifiedName == declaring.qualifiedName
+            val isOwnClass =
+                !qualify && reference.getParent(CtType::class.java).qualifiedName == declaring.qualifiedName
             if (reference.isConstructor || !isOwnClass) {
                 appendTypeReference(declaring)
             }
@@ -295,7 +307,10 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
         if (this !is CtMethod) {
             return null
         }
-        return inheritanceResolver.findSuperMethodsInCommentInheritanceOrder(this.reference.declaringType.typeDeclaration, this).firstOrNull()
+        return inheritanceResolver.findSuperMethodsInCommentInheritanceOrder(
+            this.reference.declaringType.typeDeclaration,
+            this
+        ).firstOrNull()
     }
 
     private fun appendModifiers(test: CtModifiable) {
@@ -390,22 +405,11 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
         }
     }
 
-    fun appendText(text: String): LaTeXBuilder {
+    fun appendText(text: String) {
         stringBuilder.append(text)
-        return this
     }
 
     fun appendLine() = appendText("\n")
-
-    fun build(): String {
-        var previousBuilder = indentedBuilders.pop()
-        while (indentedBuilders.isNotEmpty()) {
-            stringBuilder.appendLine()
-            stringBuilder.appendLine(previousBuilder.toString().prependIndent(INDENT))
-            previousBuilder = indentedBuilders.pop()
-        }
-        return previousBuilder.toString()
-    }
 
     private fun appendTable(width: Double = 1.0, content: LaTeXTable.() -> Unit) {
         val table = LaTeXTable()
@@ -425,12 +429,12 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
 
     private class LaTeXTable {
         val rows: MutableList<Pair<Boolean, List<LaTeXContent>>> = mutableListOf()
-
         fun addRow(vararg columns: LaTeXContent) {
             rows.add(true to columns.toList())
         }
 
         fun separator() = rows.add(false to listOf { appendCommand("hline", listOf()) })
+
     }
 
     private fun emphasized(content: LaTeXContent): LaTeXContent =
@@ -441,11 +445,54 @@ class LaTeXBuilder(private val rootPackage: CtPackage, private val inheritDoc: B
     private fun teletyped(content: LaTeXContent): LaTeXContent = { teletype(content) }
 
     private fun teletyped(content: String): LaTeXContent = teletyped { appendText(content) }
+
     fun teletype(content: LaTeXContent) = appendCommandWithArgAppender("texttt", listOf(content))
+
+    private fun appendGitlabLink(to: CtElement) {
+        if (gitlabSourceRoot == null) {
+            return
+        }
+        val position = to.position.takeUnless { it is NoSourcePosition } ?: return
+        val gitLabFile = "${gitlabSourceRoot.trimEnd('/')}/${to.position.file.relativeTo(sourceRoot).path}"
+
+        val linkUrl: LaTeXContent = {
+            appendText("$gitLabFile\\#L${position.line}")
+        }
+        val image: LaTeXContent = {
+            appendCommand("protect", listOf())
+            appendCommandWithArgAppender(
+                "scalerel*",
+                listOf({ appendCommand("includegraphics", GITLAB_LOGO_FILE) }, { appendText("B") })
+            )
+        }
+        appendCommand(" ", listOf())
+        appendCommandWithArgAppender("href", listOf(linkUrl, image))
+    }
+
+    fun appendGitlabLogoFile() = appendResourceFile("/$GITLAB_LOGO_FILE")
+
+    private fun appendResourceFile(name: String) {
+        inEnvironment("filecontents*", listOf(name.trim('/'))) {
+            appendText(
+                LaTeXBuilder::class.java.getResource(name)?.readText() ?: throw Exception("Resource $name is missing")
+            )
+        }
+    }
+
+    fun build(): String {
+        var previousBuilder = indentedBuilders.pop()
+        while (indentedBuilders.isNotEmpty()) {
+            stringBuilder.appendLine()
+            stringBuilder.appendLine(previousBuilder.toString().prependIndent(INDENT))
+            previousBuilder = indentedBuilders.pop()
+        }
+        return previousBuilder.toString()
+    }
 
     companion object {
         private const val INDENT = "  "
         private const val MEMBER_SEPARATOR = "@"
+        private const val GITLAB_LOGO_FILE = "gitlab-logo.eps"
         private fun String.escape() = replace("_", "\\_")
 
     }
