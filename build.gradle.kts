@@ -1,5 +1,7 @@
 plugins {
     kotlin("jvm") version "1.9.21"
+    application
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "de.mr_pine"
@@ -24,4 +26,14 @@ tasks.test {
 }
 kotlin {
     jvmToolchain(21)
+}
+
+val mainClassName = "de.mr_pine.doctex.CliKt"
+application {
+    mainClass = mainClassName
+}
+tasks.withType<Jar> {
+    manifest {
+        attributes["Main-Class"] = mainClassName
+    }
 }
