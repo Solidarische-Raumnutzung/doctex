@@ -7,8 +7,15 @@ import spoon.reflect.declaration.*
 import spoon.reflect.visitor.CtAbstractVisitor
 import java.io.File
 
-class LaTeXGenerator(rootPackage: CtPackage, private val minimumVisibility: Visibility, inheritDoc: Boolean, sourceRoot: File, gitlabSourceRoot: String?) : CtAbstractVisitor() {
-    private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage, inheritDoc, sourceRoot, gitlabSourceRoot)
+class LaTeXGenerator(
+    rootPackage: CtPackage,
+    private val minimumVisibility: Visibility,
+    inheritDoc: Boolean,
+    sourceRoot: File,
+    gitlabSourceRoot: String?,
+    externalJavaDocs: Map<String, String>
+) : CtAbstractVisitor() {
+    private val builder: LaTeXBuilder = LaTeXBuilder(rootPackage, inheritDoc, sourceRoot, gitlabSourceRoot, externalJavaDocs)
 
     init {
         if (gitlabSourceRoot != null) {

@@ -1,6 +1,7 @@
 package de.mr_pine.doctex
 
 import de.mr_pine.doctex.spoon.inPackage
+import de.mr_pine.doctex.spoon.javaDocUrl
 import de.mr_pine.doctex.spoon.javadoc.JavadocLaTeXConverter
 import de.mr_pine.doctex.spoon.javadoc.JavadocReferenceParentVisitor
 import spoon.javadoc.api.StandardJavadocTagType
@@ -19,7 +20,8 @@ class LaTeXBuilder(
     private val rootPackage: CtPackage,
     private val inheritDoc: Boolean,
     private val sourceRoot: File,
-    private val gitlabSourceRoot: String?
+    private val gitlabSourceRoot: String?,
+    private val externalJavaDocs: Map<String, String>
 ) {
     private var indentedBuilders = Stack<StringBuilder>().apply { push(StringBuilder()) }
     private val stringBuilder
@@ -197,8 +199,29 @@ class LaTeXBuilder(
     private fun <T : Any?> appendTypeReference(reference: CtTypeReference<T>, showSuper: Boolean = false) {
         teletype {
 
-            if (reference.isPrimitive || reference.typeDeclaration?.inPackage(rootPackage) != true) {
+            if (reference.isPrimitive) {
                 appendText(reference.simpleName.escape())
+                return@teletype
+            }
+
+            if (reference.typeDeclaration?.inPackage(rootPackage) != true) {
+                val externalJavadoc = externalJavaDocs.entries.find { (pkg, _) ->
+                    reference.qualifiedName.startsWith(pkg)
+                }
+                if (externalJavadoc == null) {
+                    appendText(reference.simpleName.escape())
+                } else {
+                    val javadocPath = reference.javaDocUrl()
+                    val url: LaTeXContent = {
+                        appendText(externalJavadoc.value.trimEnd('/'))
+                        appendText("/")
+                        appendText(javadocPath)
+                    }
+                    val name: LaTeXContent = {
+                        appendText(reference.simpleName.escape())
+                    }
+                    appendCommandWithArgAppender("href", listOf(url, name))
+                }
                 return@teletype
             }
 
@@ -244,8 +267,31 @@ class LaTeXBuilder(
     private fun <T : Any?> appendExecutableReference(reference: CtExecutableReference<T>, qualify: Boolean = false) {
         teletype {
             val declaring = reference.declaringType
-            val hyperref =
-                "hyperref[${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.executableDeclaration.signature}]"
+            val link = if (declaring.typeDeclaration.inPackage(rootPackage)) { content: String ->
+                appendCommand(
+                    "hyperref",
+                    listOf(content),
+                    listOf("${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.executableDeclaration.signature}")
+                )
+            } else { content: String ->
+                val externalJavadoc = externalJavaDocs.entries.find { (pkg, _) ->
+                    declaring.qualifiedName.startsWith(pkg)
+                }
+                if (externalJavadoc == null) {
+                    appendText(content)
+                } else {
+                    val javadocPath = reference.javaDocUrl()
+                    val url: LaTeXContent = {
+                        appendText(externalJavadoc.value.trimEnd('/'))
+                        appendText("/")
+                        appendText(javadocPath)
+                    }
+                    val name: LaTeXContent = {
+                        appendText(content)
+                    }
+                    appendCommandWithArgAppender("href", listOf(url, name))
+                }
+            }
             val isOwnClass =
                 !qualify && reference.getParent(CtType::class.java).qualifiedName == declaring.qualifiedName
             if (reference.isConstructor || !isOwnClass) {
@@ -255,12 +301,12 @@ class LaTeXBuilder(
                 appendText(".")
             }
             if (!reference.isConstructor) {
-                appendCommand(hyperref, reference.simpleName.escape())
+                link(reference.simpleName.escape())
             }
             if (reference.parameters.isNotEmpty() || reference.executableDeclaration.parameters.isEmpty()) {
-                appendCommand(hyperref, "(")
+                link("(")
                 appendTypeParameters(reference.parameters, "" to "")
-                appendCommand(hyperref, ")")
+                link(")")
             }
         }
     }
@@ -269,9 +315,34 @@ class LaTeXBuilder(
         teletype {
             val declaring = reference.declaringType
             appendTypeReference(declaring)
-            val hyperref = "hyperref[${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.simpleName}]"
-                .replace("_", "~")
-            appendCommand(hyperref, reference.simpleName.escape())
+            appendText(".")
+            if (declaring.typeDeclaration.inPackage(rootPackage)) {
+                appendCommand(
+                    "hyperref", listOf(reference.simpleName.escape()),
+                    optionalArguments = listOf(
+                        "${declaring.qualifiedName}$MEMBER_SEPARATOR${reference.simpleName}"
+                            .replace("_", "~")
+                    )
+                )
+            } else {
+                val externalJavadoc = externalJavaDocs.entries.find { (pkg, _) ->
+                    declaring.qualifiedName.startsWith(pkg)
+                }
+                if (externalJavadoc == null) {
+                    appendText(reference.simpleName.escape())
+                } else {
+                    val javadocPath = reference.javaDocUrl()
+                    val url: LaTeXContent = {
+                        appendText(externalJavadoc.value.trimEnd('/'))
+                        appendText("/")
+                        appendText(javadocPath)
+                    }
+                    val name: LaTeXContent = {
+                        appendText(reference.simpleName)
+                    }
+                    appendCommandWithArgAppender("href", listOf(url, name))
+                }
+            }
         }
     }
 
@@ -393,15 +464,15 @@ class LaTeXBuilder(
         optionalArguments: List<LaTeXContent> = listOf()
     ) {
         appendText("\\$name")
-        arguments.forEach {
-            appendText("{")
-            this.it()
-            appendText("}")
-        }
         optionalArguments.forEach {
             appendText("[")
             this.it()
             appendText("]")
+        }
+        arguments.forEach {
+            appendText("{")
+            this.it()
+            appendText("}")
         }
     }
 
@@ -466,7 +537,8 @@ class LaTeXBuilder(
             )
         }
         appendCommand(" ", listOf())
-        appendCommandWithArgAppender("href", listOf(linkUrl, image))
+        appendCommandWithArgAppender("texorpdfstring", listOf({appendCommandWithArgAppender("href", listOf(linkUrl, image))}, {}))
+
     }
 
     fun appendGitlabLogoFile() = appendResourceFile("/$GITLAB_LOGO_FILE")

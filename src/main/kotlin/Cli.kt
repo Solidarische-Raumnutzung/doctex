@@ -4,6 +4,7 @@ import com.github.ajalt.clikt.core.CliktCommand
 import com.github.ajalt.clikt.core.context
 import com.github.ajalt.clikt.output.MordantHelpFormatter
 import com.github.ajalt.clikt.parameters.arguments.argument
+import com.github.ajalt.clikt.parameters.options.associate
 import com.github.ajalt.clikt.parameters.options.default
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
@@ -27,7 +28,8 @@ class Cli : CliktCommand(name = "doctex") {
     private val classpath by option(help = "The classpath of your application, should be a folder containing .class files or a jar. Improves resolution of external classes.").file(
         mustExist = true
     )
-    private val gitlabSourceRoot by option()
+    private val gitlabSourceRoot by option(help = "A gitlab url pointing to the directory specified in the source root used to link to the definitions in the code")
+    private val externalJavaDocs by option("--ext", help = "Enable link to external javadoc, the format is [package]=[url] where url should be a url to a doclet's root level (overview without the index.html)").associate()
 
     init {
         context {
@@ -37,7 +39,7 @@ class Cli : CliktCommand(name = "doctex") {
 
     override fun run() {
         val doctex = DocTeX(sourceDir, classpath)
-        doctex.writeJavadoc(output, rootPackage, minimumVisibility, inheritDoc, gitlabSourceRoot)
+        doctex.writeJavadoc(output, rootPackage, minimumVisibility, inheritDoc, gitlabSourceRoot, externalJavaDocs)
     }
 }
 
