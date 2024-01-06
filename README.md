@@ -12,16 +12,24 @@ The `-h` Option displays all possible and necessary options:
 Usage: doctex [<options>] <sourcedir> <rootpackage>
 
 Options:
-  --output=<path>          (default: ./documentation.tex)
+  --output=<path>              (default: ./documentation.tex)
   --minimum-visibility=(PRIVATE|PROTECTED|PACKAGE|PUBLIC)
-                           (default: PROTECTED)
-  --inherit / --noInherit  Whether overriding methods that have no JavaDoc of
-                           their own should inherit the documentation of the
-                           method they are overriding (default: enabled)
-  --classpath=<path>       The classpath of your application, should be a
-                           folder containing .class files or a jar. Improves
-                           resolution of external classes.
-  -h, --help               Show this message and exit
+                               (default: PROTECTED)
+  --inherit / --noInherit      Whether overriding methods that have no JavaDoc
+                               of their own should inherit the documentation of
+                               the method they are overriding (default:
+                               enabled)
+  --classpath=<path>           The classpath of your application, should be a
+                               folder containing .class files or a jar.
+                               Improves resolution of external classes.
+  --gitlab-source-root=<text>  A gitlab url pointing to the directory specified
+                               in the source root used to link to the
+                               definitions in the code
+  --ext=<value>                Enable link to external javadoc, the format is
+                               [package]=[url] where url should be a url to a
+                               doclet's root level (overview without the
+                               index.html)
+  -h, --help                   Show this message and exit
 
 Arguments:
   <sourcedir>    The directory containing all source files the documentation
