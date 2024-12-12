@@ -58,6 +58,9 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
         }
     }
 
+    /**
+     * @see spoon.javadoc.api.parsing.LinkResolver
+     */
     override fun visitInlineTag(tag: JavadocInlineTag?): LaTeXContent = {
         if (tag != null) {
             outer@for (element in tag.elements) {
@@ -67,8 +70,6 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
                         // START BODGE: Reimplment spoon code for resolving types in a manner that works for @link
                         when (element) {
                             is JavadocText -> {
-                                val ctx: CtType<*> =
-                                    if (context is CtType<*>) context as CtType<*> else (context.getParent(CtType::class.java))
                                 if (element.text.contains("#")) {
                                     val idx = element.text.indexOf('#')
                                     val pkg = element.text.substring(0, idx)
@@ -78,10 +79,7 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
                                             else it
                                         }
                                     val entry = element.text.substring(idx + 1)
-                                    val type = ctx.position.compilationUnit.imports
-                                        .firstOrNull { it.reference?.simpleName == pkg }
-                                        ?.referencedTypes?.firstOrNull { it.simpleName == pkg }
-                                        ?.typeDeclaration
+                                    val type = qualifyType(pkg)
                                     var next = type
                                     while (next != null) {
                                         val field: CtReference? =
@@ -92,19 +90,11 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
                                         }
                                         next = next.getParent(CtType::class.java)
                                     }
-                                    println("WARNING: Reference ${element.text} could not be resolved")
                                     element.accept(this@JavadocLaTeXConverter)()
                                 } else {
-                                    ctx.position.compilationUnit.imports
-                                        .filter { it.importKind != CtImportKind.UNRESOLVED }
-                                        .firstOrNull { it.reference?.simpleName == element.text }
-                                        ?.referencedTypes?.firstOrNull { it.simpleName == element.text }
-                                        ?.typeDeclaration?.reference
+                                    qualifyType(element.text)?.reference
                                         ?.let { appendReference(it) }
-                                        ?: run {
-                                            println("WARNING: Reference ${element.text} could not be resolved")
-                                            element.accept(this@JavadocLaTeXConverter)()
-                                        }
+                                        ?: element.accept(this@JavadocLaTeXConverter)()
                                 }
                             }
                             is JavadocReference -> appendReference(element.reference)
@@ -116,6 +106,26 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
                 }
             }
         }
+    }
+
+    private fun qualifyType(name: String): CtType<*>? {
+        val ctx: CtType<*>? = if (context is CtType<*>) context as CtType<*> else context.getParent(CtType::class.java)
+        ctx?.referencedTypes
+            ?.firstOrNull { it.simpleName == name || it.qualifiedName == name }
+            ?.typeDeclaration
+            ?.let { return it }
+        (ctx?.`package` ?: ctx?.declaringType?.`package`)
+            ?.getType<CtType<*>>(name)
+            ?.let { return it }
+        if (ctx != null && name.isBlank()) return ctx
+        context.position.compilationUnit.imports
+            .filter { it.importKind != CtImportKind.UNRESOLVED }
+            .firstOrNull { it.reference?.simpleName == name }
+            ?.referencedTypes?.firstOrNull { it.simpleName == name }
+            ?.typeDeclaration
+            ?.let { return it }
+        println("WARNING: Reference $name could not be resolved")
+        return null
     }
 
     private fun qualifyTypeNameForField(enclosingType: CtType<*>, memberName: String): CtReference? {
