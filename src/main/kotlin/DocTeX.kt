@@ -35,14 +35,14 @@ class DocTeX(private val sourcedir: File, private val classpath: File?) {
         gitlabSourceRoot: String?,
         externalJavaDocs: Map<String, String>
     ) {
-        val templateText = DocTeX::class.java.getResource("/template.tex")!!.readText()
         val rootPackage = model.allPackages.find { it.qualifiedName == forPackage }
             ?: throw Exception("Invalid root package provided. Available packages: ${model.allPackages}")
         val packagesDocumentation =
-            rootPackage.resolveAllPackages().map { it.generateDocs(rootPackage, minimumVisibility, inheritDoc, sourcedir, gitlabSourceRoot, externalJavaDocs) }
+            rootPackage.resolveAllPackages().associate { it.qualifiedName to it.generateDocs(rootPackage, minimumVisibility, inheritDoc, sourcedir, gitlabSourceRoot, externalJavaDocs) }
 
-        val documentation = templateText.replace("TEXT", packagesDocumentation.joinToString("\n".repeat(3)))
-        to.writeText(documentation)
+        packagesDocumentation.forEach { (pkg, doc) ->
+            to.resolve("$pkg.tex").writeText(doc)
+        }
     }
 
     private fun CtPackage.resolveAllPackages(): List<CtPackage> =

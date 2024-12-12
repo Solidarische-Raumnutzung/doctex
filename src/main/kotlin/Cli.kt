@@ -19,7 +19,7 @@ class Cli : CliktCommand(name = "doctex") {
         mustBeReadable = true
     )
     private val rootPackage by argument(help = "The package containing all subpackages and classes the documentation should be generated for")
-    private val output by option().file(canBeDir = false, mustBeWritable = true).default(File("./documentation.tex"))
+    private val output by option().file(canBeDir = false, mustBeWritable = true).default(File("./documentation"))
     private val minimumVisibility by option().enum<Visibility>().default(Visibility.PROTECTED)
     private val inheritDoc by option(
         "--inherit",
