@@ -57,7 +57,7 @@ class LaTeXBuilder(
                 addRow(emphasized("Signature"), signature)
                 separator()
                 if (javadoc.body.isNotEmpty()) {
-                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body))
+                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body, type))
                     separator()
                 }
                 parameterJavadoc(javadoc)?.let {
@@ -134,7 +134,7 @@ class LaTeXBuilder(
                 addRow(emphasized("Signature"), signature)
                 separator()
                 if (javadoc.body.isNotEmpty()) {
-                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body))
+                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body, executable))
                     separator()
                 }
                 if (javadocReturns.isNotEmpty()) {
@@ -182,7 +182,7 @@ class LaTeXBuilder(
                 addRow(emphasized("Signature"), signature)
                 separator()
                 if (javadoc.body.isNotEmpty()) {
-                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body))
+                    addRow(emphasized("Behaviour"), javadocConverter.convertElements(javadoc.body, field))
                     separator()
                 }
             }

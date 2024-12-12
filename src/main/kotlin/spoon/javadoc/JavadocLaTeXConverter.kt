@@ -5,14 +5,18 @@ import de.mr_pine.doctex.LaTeXContent
 import de.mr_pine.doctex.intersperse
 import spoon.javadoc.api.StandardJavadocTagType
 import spoon.javadoc.api.elements.*
-import spoon.reflect.code.CtJavaDocTag.TagType
-import spoon.reflect.reference.CtExecutableReference
-import spoon.reflect.reference.CtTypeReference
+import spoon.reflect.declaration.*
+import spoon.reflect.reference.CtFieldReference
+import spoon.reflect.reference.CtReference
+import kotlin.jvm.optionals.getOrNull
 
 class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
     override fun defaultValue(): LaTeXContent = {}
 
-    fun convertElements(elements: List<JavadocElement>): LaTeXContent = {
+    private lateinit var context: CtElement
+
+    fun convertElements(elements: List<JavadocElement>, context: CtElement): LaTeXContent = {
+        this@JavadocLaTeXConverter.context = context
         elements.forEach {
             it.accept(this@JavadocLaTeXConverter)()
         }
@@ -21,7 +25,7 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
     override fun visitText(docText: JavadocText?): LaTeXContent = {
         if (docText != null) {
             var text = docText.text
-            text = text.replace("\n", " ")
+            text = text.replace("\n", " ").replace("#", ".")
             val lines = text.split("<br/>".toRegex())
             lines.map { processLine(it) }
                 .intersperse { appendCommand("newline", listOf()); appendText("%"); appendLine() }
@@ -56,13 +60,85 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
 
     override fun visitInlineTag(tag: JavadocInlineTag?): LaTeXContent = {
         if (tag != null) {
-            for (element in tag.elements) {
+            outer@for (element in tag.elements) {
                 when (tag.tagType) {
                     StandardJavadocTagType.CODE -> teletype { element.accept(this@JavadocLaTeXConverter)() }
+                    StandardJavadocTagType.LINK -> {
+                        // START BODGE: Reimplment spoon code for resolving types in a manner that works for @link
+                        when (element) {
+                            is JavadocText -> {
+                                val ctx: CtType<*> =
+                                    if (context is CtType<*>) context as CtType<*> else (context.getParent(CtType::class.java))
+                                if (element.text.contains("#")) {
+                                    val idx = element.text.indexOf('#')
+                                    val pkg = element.text.substring(0, idx)
+                                        .let {
+                                            if (it.contains("/") && !it.endsWith("/"))
+                                                it.substring(it.indexOf('/') + 1)
+                                            else it
+                                        }
+                                    val entry = element.text.substring(idx + 1)
+                                    val type = ctx.position.compilationUnit.imports
+                                        .firstOrNull { it.reference?.simpleName == pkg }
+                                        ?.referencedTypes?.firstOrNull { it.simpleName == pkg }
+                                        ?.typeDeclaration
+                                    var next = type
+                                    while (next != null) {
+                                        val field: CtReference? =
+                                            qualifyTypeNameForField(next, entry)
+                                        if (field != null) {
+                                            appendReference(field)
+                                            continue@outer
+                                        }
+                                        next = next.getParent(CtType::class.java)
+                                    }
+                                    println("WARNING: Reference ${element.text} could not be resolved")
+                                    element.accept(this@JavadocLaTeXConverter)()
+                                } else {
+                                    ctx.position.compilationUnit.imports
+                                        .filter { it.importKind != CtImportKind.UNRESOLVED }
+                                        .firstOrNull { it.reference?.simpleName == element.text }
+                                        ?.referencedTypes?.firstOrNull { it.simpleName == element.text }
+                                        ?.typeDeclaration?.reference
+                                        ?.let { appendReference(it) }
+                                        ?: run {
+                                            println("WARNING: Reference ${element.text} could not be resolved")
+                                            element.accept(this@JavadocLaTeXConverter)()
+                                        }
+                                }
+                            }
+                            is JavadocReference -> appendReference(element.reference)
+                            else -> element.accept(this@JavadocLaTeXConverter)()
+                        }
+                        // END BODGE
+                    }
                     else -> element.accept(this@JavadocLaTeXConverter)()
                 }
             }
         }
+    }
+
+    private fun qualifyTypeNameForField(enclosingType: CtType<*>, memberName: String): CtReference? {
+        // START BODGE: this is part of the @link resolution code
+        if (enclosingType is CtEnum<*>) {
+            val enumRef = enclosingType.enumValues
+                .stream()
+                .filter { it: CtEnumValue<*> -> it.simpleName == memberName }
+                .map<CtReference> { obj: CtEnumValue<*> -> obj.reference }
+                .findFirst()
+                .getOrNull()
+
+            if (enumRef != null) {
+                return enumRef
+            }
+        }
+        return enclosingType.allFields
+            .stream()
+            .filter { it: CtFieldReference<*> -> it.simpleName == memberName }
+            .map { it: CtFieldReference<*> -> it }
+            .findFirst()
+            .getOrNull()
+        // END BODGE
     }
 
     override fun visitBlockTag(tag: JavadocBlockTag?): LaTeXContent = {
