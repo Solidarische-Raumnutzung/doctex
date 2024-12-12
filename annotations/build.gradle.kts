@@ -14,10 +14,6 @@ dependencies {
     testImplementation("org.jetbrains.kotlin:kotlin-test")
 }
 
-tasks.test {
-    useJUnitPlatform()
-}
-
 java {
     withJavadocJar()
     withSourcesJar()
@@ -46,3 +42,10 @@ kotlin {
     }
 }
 
+tasks {
+    val moveArtifacts by creating(Copy::class) {
+        from(jar)
+        into(rootProject.projectDir.resolve("pages"))
+        rename { "annotations.jar" }
+    }
+}

@@ -32,8 +32,22 @@ val mainClassName = "de.mr_pine.doctex.CliKt"
 application {
     mainClass = mainClassName
 }
-tasks.withType<Jar> {
-    manifest {
-        attributes["Main-Class"] = mainClassName
+
+tasks {
+    withType<Jar> {
+        manifest {
+            attributes["Main-Class"] = mainClassName
+        }
     }
+
+    val moveArtifacts by creating(Copy::class) {
+        from(shadowJar)
+        into("pages")
+        rename { "doctex.jar" }
+    }
+}
+
+extensions.findByName("buildScan")?.withGroovyBuilder {
+    setProperty("termsOfServiceUrl", "https://gradle.com/terms-of-service")
+    setProperty("termsOfServiceAgree", "yes")
 }

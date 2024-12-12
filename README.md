@@ -1,7 +1,6 @@
 # DocTeX
 ### A tool for creating LaTeX Documentation documents from JavaDoc Comments
 
-
 DocTeX uses [Spoon](https://github.com/INRIA/spoon) to parse the provided source code and javadoc and creates a $\LaTeX$ Document from it.
 
 ## Usage
