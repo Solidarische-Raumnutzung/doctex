@@ -37,7 +37,7 @@ class LaTeXBuilder(
     fun <T : Any?> appendTypeSection(typeType: String, type: CtType<T>, content: LaTeXContent) {
         val header: LaTeXContent = {
             appendText("$typeType ${type.simpleName.escape()}")
-            appendCommand("label", type.qualifiedName)
+            appendCommand("label", type.qualifiedName.nollar())
             appendText(" ")
             appendGitlabLink(type)
         }
@@ -77,7 +77,7 @@ class LaTeXBuilder(
             appendText(headerText.escape())
             appendCommand(
                 "label",
-                "${(executable.parent as CtType<*>).qualifiedName}$MEMBER_SEPARATOR${executable.signature}"
+                "${(executable.parent as CtType<*>).qualifiedName.nollar()}$MEMBER_SEPARATOR${executable.signature.nollar()}"
             )
             appendGitlabLink(executable)
         }
@@ -163,7 +163,7 @@ class LaTeXBuilder(
             appendText("$fieldType ${field.simpleName.escape()}")
             appendCommand(
                 "label",
-                "${of.qualifiedName}$MEMBER_SEPARATOR${field.simpleName}"
+                "${of.qualifiedName.nollar()}$MEMBER_SEPARATOR${field.simpleName.nollar()}"
             )
             appendGitlabLink(field)
         }
@@ -238,7 +238,7 @@ class LaTeXBuilder(
                 return@teletype
             }
 
-            appendCommand("hyperref[${reference.qualifiedName}]") {
+            appendCommand("hyperref[${reference.qualifiedName.nollar()}]") {
                 teletype {
                     appendText(reference.simpleName.escape())
                 }
@@ -566,7 +566,7 @@ class LaTeXBuilder(
         private const val MEMBER_SEPARATOR = "@"
         private const val GITLAB_LOGO_FILE = "gitlab-logo.eps"
         private fun String.escape() = replace("_", "\\_")
-
+        private fun String.nollar() = replace("$", ".")
     }
 
     private val CtElement.javadoc: JavadocCommentView
