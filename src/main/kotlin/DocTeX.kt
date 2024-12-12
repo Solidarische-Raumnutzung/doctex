@@ -40,6 +40,7 @@ class DocTeX(private val sourcedir: File, private val classpath: File?) {
         val packagesDocumentation =
             rootPackage.resolveAllPackages().associate { it.qualifiedName to it.generateDocs(rootPackage, minimumVisibility, inheritDoc, sourcedir, gitlabSourceRoot, externalJavaDocs) }
 
+        to.mkdirs()
         packagesDocumentation.forEach { (pkg, doc) ->
             to.resolve("$pkg.tex").writeText(doc)
         }
