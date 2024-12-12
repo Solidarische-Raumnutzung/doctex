@@ -82,8 +82,7 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
                                     val type = qualifyType(pkg)
                                     var next = type
                                     while (next != null) {
-                                        val field: CtReference? =
-                                            qualifyTypeNameForField(next, entry)
+                                        val field: CtReference? = qualifyTypeNameForField(next, entry)
                                         if (field != null) {
                                             appendReference(field)
                                             continue@outer
@@ -114,9 +113,16 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
             ?.firstOrNull { it.simpleName == name || it.qualifiedName == name }
             ?.typeDeclaration
             ?.let { return it }
-        (ctx?.`package` ?: ctx?.declaringType?.`package`)
-            ?.getType<CtType<*>>(name)
-            ?.let { return it }
+        ctx?.forEachDeclaring {
+            it.`package`
+                ?.getType<CtType<*>>(name)
+                ?.let { return it }
+        }
+        ctx?.forEachDeclaring {
+            it.nestedTypes
+                .firstOrNull { it.simpleName == name }
+                ?.let { return it }
+        }
         if (ctx != null && name.isBlank()) return ctx
         context.position.compilationUnit.imports
             .filter { it.importKind != CtImportKind.UNRESOLVED }
@@ -124,8 +130,16 @@ class JavadocLaTeXConverter : JavadocVisitor<LaTeXContent> {
             ?.referencedTypes?.firstOrNull { it.simpleName == name }
             ?.typeDeclaration
             ?.let { return it }
-        println("WARNING: Reference $name could not be resolved")
+        println("WARNING: Reference $name could not be resolved (context: ${ctx?.qualifiedName ?: context.position.file})")
         return null
+    }
+
+    private inline fun CtType<*>.forEachDeclaring(action: (CtType<*>) -> Unit) {
+        var parent: CtType<*>? = this
+        while (parent != null) {
+            action(parent)
+            parent = parent.declaringType
+        }
     }
 
     private fun qualifyTypeNameForField(enclosingType: CtType<*>, memberName: String): CtReference? {
