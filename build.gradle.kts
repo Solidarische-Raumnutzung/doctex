@@ -5,8 +5,10 @@ plugins {
     `maven-publish`
 }
 
-group = "de.mr_pine"
-version = "1.0.1-SNAPSHOT"
+allprojects {
+    group = "edu.kit.hci.soli"
+    version = "1.0.1-SNAPSHOT"
+}
 
 repositories {
     mavenCentral()
@@ -48,19 +50,27 @@ tasks {
     }
 }
 
-publishing {
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/Solidarische-Raumnutzung/DocTeX")
-            credentials {
-                username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
-                password = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+allprojects {
+    afterEvaluate {
+        publishing {
+            repositories {
+                maven {
+                    name = "GitHubPackages"
+                    url = uri("https://maven.pkg.github.com/Solidarische-Raumnutzung/DocTeX")
+                    credentials {
+                        username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
+                        password = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+                    }
+                }
             }
         }
     }
+}
+
+publishing {
     publications {
         create<MavenPublication>("maven") {
+            artifactId = "doctex"
             from(components["java"])
         }
     }
