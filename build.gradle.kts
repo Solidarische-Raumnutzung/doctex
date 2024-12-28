@@ -2,10 +2,11 @@ plugins {
     kotlin("jvm") version "2.1.0"
     application
     id("com.github.johnrengelman.shadow") version "8.1.1"
+    `maven-publish`
 }
 
 group = "de.mr_pine"
-version = "1.0.1"
+version = "1.0.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -44,6 +45,24 @@ tasks {
         from(shadowJar)
         into("pages")
         rename { "doctex.jar" }
+    }
+}
+
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = uri("https://maven.pkg.github.com/Solidarische-Raumnutzung/DocTeX")
+            credentials {
+                username = project.findProperty("gpr.user") as String? ?: System.getenv("GITHUB_ACTOR")
+                password = project.findProperty("gpr.key") as String? ?: System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+    publications {
+        create<MavenPublication>("maven") {
+            from(components["java"])
+        }
     }
 }
 

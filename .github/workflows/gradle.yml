@@ -29,7 +29,9 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@4ba34e96c5f6493e99d0696180a9a8d431577ba9
       - name: Build and test with Gradle
-        run: ./gradlew clean build test moveArtifacts --scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: ./gradlew clean build test moveArtifacts publish --scan
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
