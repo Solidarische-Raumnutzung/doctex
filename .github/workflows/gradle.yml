@@ -28,7 +28,11 @@ jobs:
           server-id: github
           settings-path: ${{ github.workspace }}
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@4ba34e96c5f6493e99d0696180a9a8d431577ba9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/terms-of-service"
+          build-scan-terms-of-use-agree: "yes"
       - name: Build and test with Gradle
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
